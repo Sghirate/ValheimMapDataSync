@@ -7,7 +7,7 @@ A very simple plugin to make Valheim a wee bit more coop-friendly
 * [BepInEx 4 Valheim](https://valheim.thunderstore.io/package/denikson/BepInExPack_Valheim/)
 
 ## Install
-* Copy **ValheimMapDataSync.dll** to **<ValheimGameDir>/BepInEx/plugins/**
+* Copy **ValheimMapDataSync.dll** to **[ValheimGameDir]/BepInEx/plugins/**
 
 ## Features
 * **Autovisible(.cs)**: Automatically set the 'visible to other players' flag when joining a game
