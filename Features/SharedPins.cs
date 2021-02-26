@@ -246,15 +246,15 @@ namespace ValheimMapDataSync
                 s_syncedPins.Clear();
             }
         }
-        [HarmonyPatch(typeof(ZDOMan), "AddPeer", typeof(ZNetPeer))]
-        public static class ZDOMan_AddPeer
+        [HarmonyPatch(typeof(ZRoutedRpc), "AddPeer", typeof(ZNetPeer))]
+        public static class ZRoutedRpc_AddPeer
         {
-            private static void Postfix(ref ZDOMan __instance, ZNetPeer netPeer)
+            private static void Postfix(ref ZRoutedRpc __instance, ZNetPeer peer)
             {
-                long serverPeerId = ZRoutedRpc_Hooks.GetServerPeerID(ZRoutedRpc.instance);
-                UnityEngine.Debug.LogWarning($"Add Peer: {netPeer.m_uid}: {netPeer.m_playerName} (self: {ZNet.instance.GetUID()}; server: {serverPeerId})");
+                long serverPeerId = ZRoutedRpc_Hooks.GetServerPeerID(__instance);
+                UnityEngine.Debug.LogWarning($"Add Peer: {peer.m_uid}: {peer.m_playerName} (self: {ZNet.instance.GetUID()}; server: {serverPeerId})");
 
-                if (netPeer.m_uid != serverPeerId)
+                if (peer.m_uid != serverPeerId)
                 {
                     if (GetHasGenerated(Minimap.instance))
                     {
@@ -265,7 +265,7 @@ namespace ValheimMapDataSync
                             {
                                 if (pins[i].m_save)
                                 {
-                                    Call_AddPin(netPeer.m_uid, pins[i].m_pos, (int)pins[i].m_type, pins[i].m_name);
+                                    Call_AddPin(peer.m_uid, pins[i].m_pos, (int)pins[i].m_type, pins[i].m_name);
                                 }
                             }
                         }
@@ -273,14 +273,14 @@ namespace ValheimMapDataSync
                 }
             }
         }
-        [HarmonyPatch(typeof(ZDOMan), "RemovePeer", typeof(ZNetPeer))]
-        public static class ZDOMan_RemovePeer
+        [HarmonyPatch(typeof(ZRoutedRpc), "RemovePeer", typeof(ZNetPeer))]
+        public static class ZRoutedRpc_RemovePeer
         {
-            private static void Postfix(ref ZDOMan __instance, ZNetPeer netPeer)
+            private static void Postfix(ref ZRoutedRpc __instance, ZNetPeer peer)
             {
-                UnityEngine.Debug.LogWarning($"Remove Peer: {netPeer.m_uid}: {netPeer.m_playerName}");
+                UnityEngine.Debug.LogWarning($"Remove Peer: {peer.m_uid}: {peer.m_playerName}");
 
-                RemoveAllPinsFromMinimap(netPeer.m_uid);
+                RemoveAllPinsFromMinimap(peer.m_uid);
             }
         }
     }
