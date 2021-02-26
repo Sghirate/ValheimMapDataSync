@@ -37,12 +37,14 @@ namespace ValheimMapDataSync
 
         public static void AddPinToMinimap(long sender, Vector3 pos, Minimap.PinType pinType, string name)
         {
-            if (GetHasGenerated(Minimap.instance))
+            if (!GetHasGenerated(Minimap.instance))
             {
+                UnityEngine.Debug.LogWarning("queue pin");
                 s_pendingPins.Add(new Tuple<long, Vector3, Minimap.PinType, string>(sender, pos, pinType, name));
             }
             else
             {
+                UnityEngine.Debug.LogWarning("append pin");
                 List<Minimap.PinData> pins;
                 if (!s_syncedPins.TryGetValue(sender, out pins))
                 {
@@ -59,12 +61,15 @@ namespace ValheimMapDataSync
                     }
                 }
 
-                pins.Add(Minimap.instance.AddPin(pos, pinType, name, false, false));
+                UnityEngine.Debug.LogWarning("create minimap pin");
+                Minimap.PinData newPin = Minimap.instance.AddPin(pos, pinType, name, false, false);
+
+                pins.Add(newPin);
             }
         }
         public static void RemovePinFromMinimap(long sender, Vector3 pos, Minimap.PinType pinType)
         {
-            if (GetHasGenerated(Minimap.instance))
+            if (!GetHasGenerated(Minimap.instance))
             {
                 for (int i = s_pendingPins.Count - 1; i >= 0; --i)
                 {
@@ -91,7 +96,7 @@ namespace ValheimMapDataSync
         }
         public static void RemoveAllPinsFromMinimap(long sender)
         {
-            if (GetHasGenerated(Minimap.instance))
+            if (!GetHasGenerated(Minimap.instance))
             {
                 for (int i = s_pendingPins.Count - 1; i >= 0; --i)
                 {
@@ -114,13 +119,44 @@ namespace ValheimMapDataSync
                 }
             }
         }
+        public static void RenamePinOnMinimap(long sender, Vector3 pos, Minimap.PinType pinType, string name)
+        {
+            if (!GetHasGenerated(Minimap.instance))
+            {
+                for (int i = s_pendingPins.Count - 1; i >= 0; --i)
+                {
+                    if (s_pendingPins[i].Item1 == sender && s_pendingPins[i].Item3 == pinType && Utils.DistanceXZ(s_pendingPins[i].Item2, pos) < 1f)
+                    {
+                        s_pendingPins[i] = new Tuple<long, Vector3, Minimap.PinType, string>(
+                            sender,
+                            pos,
+                            pinType,
+                            name);
+                    }
+                }
+            }
+            else
+            {
+                if (s_syncedPins.TryGetValue(sender, out List<Minimap.PinData> pins))
+                {
+                    for (int i = pins.Count - 1; i >= 0; --i)
+                    {
+                        if (pins[i].m_type == pinType && Utils.DistanceXZ(pins[i].m_pos, pos) < 1f)
+                        {
+                            pins[i].m_name = name;
+                        }
+                    }
+                }
+            }
+        }
+       
         public static void RPC_AddPin(long sender, Vector3 pos, int pinType, string name)
         {
             if (ZNet.instance == null || ZNet.instance.GetUID() == sender)
             {
                 return;
             }
-            UnityEngine.Debug.LogWarning("RPC_AddPin");
+            UnityEngine.Debug.LogWarning($"RPC_AddPin: {sender}, {pinType}, {name}, {pos}");
             AddPinToMinimap(sender, pos, (Minimap.PinType)pinType, name);
         }
         public static void Call_AddPin(Vector3 pos, int pinType, string name)
@@ -173,6 +209,24 @@ namespace ValheimMapDataSync
             UnityEngine.Debug.LogWarning("Call_RemoveAllPins");
             ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, "SharedPins_RemoveAllPins", new object[]{ });
         }
+        public static void RPC_RenamePin(long sender, Vector3 pos, int pinType, string name)
+        {
+            if (ZNet.instance == null || ZNet.instance.GetUID() == sender)
+            {
+                return;
+            }
+            UnityEngine.Debug.LogWarning("RPC_RenamePin");
+            RenamePinOnMinimap(sender, pos, (Minimap.PinType)pinType, name);
+        }
+        public static void Call_RenamePin(Vector3 pos, int pinType, string name)
+        {
+            UnityEngine.Debug.LogWarning("Call_RenamePin");
+            ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, "SharedPins_RenamePin", new object[] {
+                pos,
+                pinType,
+                name
+            });
+        }
 
         [HarmonyPatch(typeof(ZRoutedRpc))]
         public static class ZRoutedRpc_Hooks
@@ -186,9 +240,14 @@ namespace ValheimMapDataSync
         {
             private static void Postfix(ref Game __instance)
             {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
                 ZRoutedRpc.instance.Register<Vector3, int, string>("SharedPins_AddPin", new System.Action<long, Vector3, int, string>(RPC_AddPin));
                 ZRoutedRpc.instance.Register<Vector3, int>("SharedPins_RemovePin", new System.Action<long, Vector3, int>(RPC_RemovePin));
                 ZRoutedRpc.instance.Register("SharedPins_RemoveAllPins", new System.Action<long>(RPC_RemoveAllPins));
+                ZRoutedRpc.instance.Register<Vector3, int, string>("SharedPins_RenamePin", new Action<long, Vector3, int, string>(RPC_RenamePin));
             }
         }
 
@@ -197,6 +256,10 @@ namespace ValheimMapDataSync
         {
             private static void Postfix(ref Minimap __instance, Vector3 pos, Minimap.PinType type, string name, bool save, bool isChecked)
             {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
                 if (save)
                 {
                     Call_AddPin(pos, (int)type, name);
@@ -208,6 +271,10 @@ namespace ValheimMapDataSync
         {
             private static void Postfix(ref Minimap __instance, Minimap.PinData pin)
             {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
                 if (pin.m_save)
                 {
                     Call_RemovePin(pin.m_pos, (int)pin.m_type, pin.m_name);
@@ -219,6 +286,10 @@ namespace ValheimMapDataSync
         {
             private static void Postfix(ref Minimap __instance)
             {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
                 List<Minimap.PinData> pins = GetPins(__instance);
                 if (pins != null)
                 {
@@ -243,7 +314,35 @@ namespace ValheimMapDataSync
         {
             private static void Postfix(ref Minimap __instance)
             {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
                 s_syncedPins.Clear();
+            }
+        }
+        [HarmonyPatch(typeof(Minimap), "UpdateNameInput")]
+        public static class Minimap_UpdateNameInput
+        {
+            private static void Prefix(ref Minimap __instance, ref Minimap.PinData __state, ref Minimap.PinData ___m_namePin)
+            {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
+                __state = GetHasGenerated(Minimap.instance) ? ___m_namePin : null;
+            }
+
+            private static void Postfix(ref Minimap __instance, Minimap.PinData __state, ref Minimap.PinData ___m_namePin)
+            {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
+                if (__state != null && __state.m_save && ___m_namePin == null)
+                {
+                    Call_RenamePin(__state.m_pos, (int)__state.m_type, __state.m_name);
+                }
             }
         }
         [HarmonyPatch(typeof(ZRoutedRpc), "AddPeer", typeof(ZNetPeer))]
@@ -251,9 +350,13 @@ namespace ValheimMapDataSync
         {
             private static void Postfix(ref ZRoutedRpc __instance, ZNetPeer peer)
             {
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
+
                 long serverPeerId = ZRoutedRpc_Hooks.GetServerPeerID(__instance);
                 UnityEngine.Debug.LogWarning($"Add Peer: {peer.m_uid}: {peer.m_playerName} (self: {ZNet.instance.GetUID()}; server: {serverPeerId})");
-
                 if (peer.m_uid != serverPeerId)
                 {
                     if (GetHasGenerated(Minimap.instance))
@@ -278,8 +381,12 @@ namespace ValheimMapDataSync
         {
             private static void Postfix(ref ZRoutedRpc __instance, ZNetPeer peer)
             {
-                UnityEngine.Debug.LogWarning($"Remove Peer: {peer.m_uid}: {peer.m_playerName}");
+                if (cfg_enabled == null || !cfg_enabled.Value)
+                {
+                    return;
+                }
 
+                UnityEngine.Debug.LogWarning($"Remove Peer: {peer.m_uid}: {peer.m_playerName}");
                 RemoveAllPinsFromMinimap(peer.m_uid);
             }
         }
