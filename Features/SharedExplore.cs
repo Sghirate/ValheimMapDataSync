@@ -84,7 +84,7 @@ namespace ValheimMapDataSync
                     int idx = y * Minimap.instance.m_textureSize + x;
                     int localX = x - minX;
                     int localY = y - minY;
-                    int localIdx = y * w + x;
+                    int localIdx = localY * w + localX;
                     bits[localIdx] = explored[idx];
                 }
             }
@@ -122,7 +122,7 @@ namespace ValheimMapDataSync
                     int idx = y * Minimap.instance.m_textureSize + x;
                     int localX = x - minX;
                     int localY = y - minY;
-                    int localIdx = y * w + x;
+                    int localIdx = localY * w + localX;
                     explored[idx] |= bits[localIdx];
                 }
             }
